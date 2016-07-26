@@ -39,7 +39,7 @@ source.RunForeach(envelope =>
 }, mat);
 ```
 
-Journal implementers are encouraged to put this identifier in a variable known to the user, such that one can access it via ReadJournalFor<SqlReadJournal>(SqlReadJournal.Identifier), however this is not enforced.
+Journal implementers are encouraged to put this identifier in a variable known to the user, such that one can access it via `ReadJournalFor<SqlReadJournal>(SqlReadJournal.Identifier)`, however this is not enforced.
 
 Read journal implementations are available as Community plugins.
 
