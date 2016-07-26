@@ -53,28 +53,47 @@ The predefined queries are:
 
 **AllPersistenceIdsQuery and CurrentPersistenceIdsQuery**
 
-`AllPersistenceIds` which is designed to allow users to subscribe to a stream of all persistent ids in the system. By default this stream should be assumed to be a "live" stream, which means that the journal should keep emitting new persistence ids as they come into the system:
+`AllPersistenceIds` is used for retrieving all persistenceIds of all persistent actors.
 
 ```csharp
-readJournal.AllPersistenceIds();
+var queries = PersistenceQuery.Get(actorSystem)
+    .ReadJournalFor<SqlReadJournal>("akka.persistence.query.my-read-journal");
+
+var mat = ActorMaterializer.Create(actorSystem);
+Source<string, NotUsed> src = queries.AllPersistenceIds();
 ```
 
-If your usage does not require a live stream, you can use the `CurrentPersistenceIds` query:
+The returned event stream is unordered and you can expect different order for multiple executions of the query.
 
-```csharp
-readJournal.CurrentPersistenceIds();
-```
+The stream is not completed when it reaches the end of the currently used `PersistenceIds`, but it continues to push new `PersistenceIds` when new persistent actors are created. Corresponding query that is completed when it reaches the end of the currently used `PersistenceIds` is provided by `CurrentPersistenceIds`.
+
+The write journal is notifying the query side as soon as new `PersistenceIds` are created and there is no periodic polling or batching involved in this query.
+
+The stream is completed with failure if there is a failure in executing the query in the backend journal.
+
 
 **EventsByPersistenceIdQuery and CurrentEventsByPersistenceIdQuery**
 
-`EventsByPersistenceId` is a query equivalent to replaying a `PersistentActor`, however, since it is a stream it is possible to keep it alive and watch for additional incoming events persisted by the persistent actor identified by the given persistenceId.
+`EventsByPersistenceId` is used for retrieving events for a specific `PersistentActor` identified by `PersistenceId`.
 
 ```csharp
-readJournal.EventsByPersistenceId("user-us-1337", 0L, long.MaxValue);
-```
-Most journals will have to revert to polling in order to achieve this, which can typically be configured with a refresh-interval configuration property.
+var queries = PersistenceQuery.Get(actorSystem)
+    .ReadJournalFor<SqlReadJournal>("akka.persistence.query.my-read-journal");
 
-If your usage does not require a live stream, you can use the `CurrentEventsByPersistenceId` query.
+var mat = ActorMaterializer.Create(actorSystem);
+var src = queries.EventsByPersistenceId("some-persistence-id", 0L, long.MaxValue);
+Source<object, NotUsed> events = src.Select(c => c.Event);
+```
+
+You can retrieve a subset of all events by specifying `FromSequenceNr` and `ToSequenceNr` or use `0L` and `long.MaxValue` respectively to retrieve all events. Note that the corresponding sequence number of each event is provided in the `EventEnvelope`, which makes it possible to resume the stream at a later point from a given sequence number.
+
+The returned event stream is ordered by sequence number, i.e. the same order as the PersistentActor persisted the events. The same prefix of stream elements (in same order) are returned for multiple executions of the query, except for when events have been deleted.
+
+The stream is not completed when it reaches the end of the currently stored events, but it continues to push new events when new events are persisted. Corresponding query that is completed when it reaches the end of the currently stored events is provided by `CurrentEventsByPersistenceId`.
+
+The write journal is notifying the query side as soon as events are persisted, but for efficiency reasons the query side retrieves the events in batches that sometimes can be delayed up to the configured `refresh-interval` or given `RefreshInterval` hint.
+
+The stream is completed with failure if there is a failure in executing the query in the backend journal.
 
 **EventsByTag and CurrentEventsByTag**
 
@@ -285,5 +304,32 @@ class TheOneWhoWritesToQueryJournal(id: String) extends Actor {
     // some complicated aggregation logic here ...
     state
   }
+}
+```
+## Configuration
+Configuration settings can be defined in the configuration section with the absolute path corresponding to the identifier, which is `Akka.Persistence.Query.Journal.Sqlite` for the default `SqlReadJournal.Identifier`.
+
+It can be configured with the following properties:
+
+```hocon
+# Configuration for the SqlReadJournal
+akka.persistence.query.journal.leveldb {
+  # Implementation class of the Sqlite SqlReadJournalProvider
+  class = "Akka.Persistence.Query.Sql.SqlReadJournalProvider"
+  
+  # Absolute path to the write journal plugin configuration entry that this 
+  # query journal will connect to. That must be a SqliteJournal.
+  # If undefined (or "") it will connect to the default journal as specified by the
+  # akka.persistence.journal.plugin property.
+  write-plugin = ""
+  
+  # The LevelDB write journal is notifying the query side as soon as things
+  # are persisted, but for efficiency reasons the query side retrieves the events 
+  # in batches that sometimes can be delayed up to the configured `refresh-interval`.
+  refresh-interval = 3s
+  
+  # How many events to fetch in one query (replay) and keep buffered until they
+  # are delivered downstreams.
+  max-buffer-size = 100
 }
 ```
