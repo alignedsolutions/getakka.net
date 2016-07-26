@@ -87,7 +87,7 @@ Source<object, NotUsed> events = src.Select(c => c.Event);
 
 You can retrieve a subset of all events by specifying `FromSequenceNr` and `ToSequenceNr` or use `0L` and `long.MaxValue` respectively to retrieve all events. Note that the corresponding sequence number of each event is provided in the `EventEnvelope`, which makes it possible to resume the stream at a later point from a given sequence number.
 
-The returned event stream is ordered by sequence number, i.e. the same order as the PersistentActor persisted the events. The same prefix of stream elements (in same order) are returned for multiple executions of the query, except for when events have been deleted.
+The returned event stream is ordered by sequence number, i.e. the same order as the `PersistentActor` persisted the events. The same prefix of stream elements (in same order) are returned for multiple executions of the query, except for when events have been deleted.
 
 The stream is not completed when it reaches the end of the currently stored events, but it continues to push new events when new events are persisted. Corresponding query that is completed when it reaches the end of the currently stored events is provided by `CurrentEventsByPersistenceId`.
 
@@ -243,7 +243,7 @@ readJournal
   .runWith(Sink.fromSubscriber(dbBatchWriter)) // write batches to read-side database
 ```
 
-### Materialize view using mapAsync
+### Materialize view using SelectAsync
 If the target database does not provide a reactive streams Subscriber that can perform writes, you may have to implement the write logic using plain functions or Actors instead.
 
 In case your write logic is state-less and you just need to convert the events from one data type to another before writing into the alternative datastore, then the projection is as simple as:
