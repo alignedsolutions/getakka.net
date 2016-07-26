@@ -39,7 +39,7 @@ source.RunForeach(envelope =>
 }, mat);
 ```
 
-Journal implementers are encouraged to put this identifier in a variable known to the user, such that one can access it via readJournalFor[NoopJournal](NoopJournal.identifier), however this is not enforced.
+Journal implementers are encouraged to put this identifier in a variable known to the user, such that one can access it via ReadJournalFor<SqlReadJournal>(SqlReadJournal.Identifier), however this is not enforced.
 
 Read journal implementations are available as Community plugins.
 
@@ -313,7 +313,7 @@ It can be configured with the following properties:
 
 ```hocon
 # Configuration for the SqlReadJournal
-akka.persistence.query.journal.leveldb {
+akka.persistence.query.journal.sqlite  {
   # Implementation class of the Sqlite SqlReadJournalProvider
   class = "Akka.Persistence.Query.Sql.SqlReadJournalProvider"
   
@@ -323,7 +323,7 @@ akka.persistence.query.journal.leveldb {
   # akka.persistence.journal.plugin property.
   write-plugin = ""
   
-  # The LevelDB write journal is notifying the query side as soon as things
+  # The Sqlite write journal is notifying the query side as soon as things
   # are persisted, but for efficiency reasons the query side retrieves the events 
   # in batches that sometimes can be delayed up to the configured `refresh-interval`.
   refresh-interval = 3s
