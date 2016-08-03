@@ -5,13 +5,13 @@ title: Persistence Query
 # Persistence Query
 Akka persistence query complements Persistence by providing a universal asynchronous stream based query interface that various journal plugins can implement in order to expose their query capabilities.
 
-The most typical use case of persistence query is implementing the so-called query side (also known as "read side") in the popular CQRS architecture pattern - in which the writing side of the application (e.g. implemented using akka persistence) is completely separated from the "query side". Akka Persistence Query itself is not directly the query side of an application, however it can help to migrate data from the write side to the query side database. In very simple scenarios Persistence Query may be powerful enough to fulfill the query needs of your app, however we highly recommend (in the spirit of CQRS) of splitting up the write/read sides into separate datastores as the need arises.
+The most typical use case of persistence query is implementing the so-called query side (also known as "read side") in the popular CQRS architecture pattern - in which the writing side of the application (e.g. implemented using akka persistence) is completely separated from the "query side". Akka Persistence Query itself is not directly the query side of an application, however it can help to migrate data from the write side to the query side database. In very simple scenarios Persistence Query may be powerful enough to fulfill the query needs of your app, however we highly recommend (in the spirit of CQRS) splitting up the write/read sides into separate datastores as the need arises.
 
 > **Warning** <br>
-This module is marked as “experimental” as of its introduction in Akka.Net 1.1.0. We will continue to improve this API based on our users’ feedback, which implies that while we try to keep incompatible changes to a minimum the binary compatibility guarantee for maintenance releases does not apply to the contents of the akka.persistence.query package.
+This module is marked as “experimental” as of its introduction in Akka.Net 1.1.0. We will continue to improve this API based on our users’ feedback, which implies that while we try to keep incompatible changes to a minimum the binary compatibility guarantee for maintenance releases does not apply to the contents of the Akka.Persistence.Query package.
 
 ## Design overview
-Akka persistence query is purposely designed to be a very loosely specified API. This is in order to keep the provided APIs general enough for each journal implementation to be able to expose its best features, e.g. a SQL journal can use complex SQL queries or if a journal is able to subscribe to a live event stream this should also be possible to expose the same API - a typed stream of events.
+Akka Persistence Query is purposely designed to be a very loosely specified API. This is in order to keep the provided APIs general enough for each journal implementation to be able to expose its best features, e.g. a SQL journal can use complex SQL queries or if a journal is able to subscribe to a live event stream this should also be possible to expose the same API - a typed stream of events.
 
 Each read journal must explicitly document which types of queries it supports. Refer to your journal's plugins documentation for details on which queries and semantics it supports.
 
@@ -44,7 +44,7 @@ Journal implementers are encouraged to put this identifier in a variable known t
 Read journal implementations are available as Community plugins.
 
 ### Predefined queries
-Akka persistence query comes with a number of query interfaces built in and suggests Journal implementors to implement them according to the semantics described below. It is important to notice that while these query types are very common a journal is not obliged to implement all of them - for example because in a given journal such query would be significantly inefficient.
+Akka Persistence Query comes with a number of query interfaces built in and suggests Journal implementors to implement them according to the semantics described below. It is important to notice that while these query types are very common a journal is not required to implement all of them - for example because in a given journal such query would be significantly inefficient.
 
 > **Note**<br>
 Refer to the documentation of the ReadJournal plugin you are using for a specific list of supported query types. For example, Journal plugins should document their stream completion strategies.
@@ -191,11 +191,11 @@ public class QueryMetadata
 }
 ```
 
-```scala
-def byTagsWithMeta(tags: Set[String]): Source[RichEvent, QueryMetadata] = { }
+```csharp
+public Source<RichEvent, QueryMetadata> ByTagsWithMeta(ISet<string> tags) { }
 ```
 
-```scala
+```csharp
 var query = readJournal.ByTagsWithMeta(ImmutableHashSet.Create("red", "blue"));
 query
     .MapMaterializedValue(meta =>
@@ -225,22 +225,22 @@ When referring to Materialized Views in Akka Persistence think of it as "some pe
 ### Materialize view to Reactive Streams compatible datastore
 If the read datastore exposes a Reactive Streams interface then implementing a simple projection is as simple as, using the read-journal and feeding it into the databases driver interface, for example like so:
 
-```scala
-implicit val system = ActorSystem()
-implicit val mat = ActorMaterializer()
+```csharp
+var system = ActorSystem.Create("MySystem");
+var mat = ActorMaterializer.Create(system);
  
-val readJournal =
-  PersistenceQuery(system).readJournalFor[MyScaladslReadJournal](JournalId)
-val dbBatchWriter: Subscriber[immutable.Seq[Any]] =
-  ReactiveStreamsCompatibleDBDriver.batchWriter
+var readJournal =
+  PersistenceQuery.Get(system).ReadJournalFor<MyReadJournal>(JournalId)
+ISubscriber<IImmutableList<object>> dbBatchWriter =
+  new ReactiveStreamsCompatibleDBDriver.BatchWriter();
  
 // Using an example (Reactive Streams) Database driver
 readJournal
-  .eventsByPersistenceId("user-1337")
-  .map(envelope => envelope.event)
-  .map(convertToReadSideTypes) // convert to datatype
-  .grouped(20) // batch inserts into groups of 20
-  .runWith(Sink.fromSubscriber(dbBatchWriter)) // write batches to read-side database
+  .EventsByPersistenceId("user-1337")
+  .Select(envelope => envelope.event)
+  .Select(ConvertToReadSideTypes) // convert to datatype
+  .Grouped(20) // batch inserts into groups of 20
+  .RunWith(Sink.FromSubscriber(dbBatchWriter), mat); // write batches to read-side database
 ```
 
 ### Materialize view using SelectAsync
@@ -272,37 +272,39 @@ Sometimes you may need to implement "resumable" projections, that will not start
 
 The example below additionally highlights how you would use Actors to implement the write side, in case you need to do some complex logic that would be best handled inside an Actor before persisting the event into the other datastore:
 
-```scala
-import akka.pattern.ask
-import system.dispatcher
-implicit val timeout = Timeout(3.seconds)
+```csharp
+var timeout = Timeout(3.seconds);
  
-val bidProjection = new MyResumableProjection("bid")
+var bidProjection = new MyResumableProjection("bid");
  
-val writerProps = Props(classOf[TheOneWhoWritesToQueryJournal], "bid")
-val writer = system.actorOf(writerProps, "bid-projection-writer")
+var writerProps = Props.Create(typeof(TheOneWhoWritesToQueryJournal), "bid");
+var writer = system.ActorOf(writerProps, "bid-projection-writer");
  
-bidProjection.latestOffset.foreach { startFromOffset =>
-  readJournal
-    .eventsByTag("bid", startFromOffset)
-    .mapAsync(8) { envelope => (writer ? envelope.event).map(_ => envelope.offset) }
-    .mapAsync(1) { offset => bidProjection.saveProgress(offset) }
-    .runWith(Sink.ignore)
-}
-class TheOneWhoWritesToQueryJournal(id: String) extends Actor {
-  val store = new DummyStore()
+readJournal
+  .EventsByTag("bid", bidProjection.LatestOffset ?? 0L)
+  .SelectAsync(8, envelope => writer.Ask(envelope.event, timeout).ContinueWith(t => envelope.offset, TaskContinuationOptions.OnlyOnRanToCompletion))
+  .SelectAsync(1, offset => bidProjection.saveProgress(offset))
+  .RunWith(Sink.Ignore<object>(), mat);
+
+public class TheOneWhoWritesToQueryJournal(id: String) : ActorBase
+{
+  public TheOneWhoWritesToQueryJournal(string id) {}
+
+  private DummyStore _store = new DummyStore();
  
-  var state: ComplexState = ComplexState()
+  private ComplexState _state = ComplexState();
  
-  def receive = {
-    case m =>
-      state = updateState(state, m)
-      if (state.readyToSave) store.save(Record(state))
+  protected override bool Receive(object message) {
+    _state = UpdateState(_state, message);
+    if (_state.IsReadyToSave())
+      _store.Save(new Record(_state));
+    return true;
   }
  
-  def updateState(state: ComplexState, msg: Any): ComplexState = {
+  private ComplexState UpdateState(ComplexState state, object msg)
+  {
     // some complicated aggregation logic here ...
-    state
+    return state;
   }
 }
 ```
